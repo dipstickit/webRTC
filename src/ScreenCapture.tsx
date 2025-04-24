@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import axios from "axios";
 
 const ScreenCapture = () => {
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -28,7 +29,6 @@ const ScreenCapture = () => {
     }
   };
 
-  // Stop capturing the screen
   const stopCapture = () => {
     if (stream) {
       const tracks = stream.getTracks();
@@ -38,7 +38,7 @@ const ScreenCapture = () => {
     setIsCapturing(false);
   };
 
-  const captureFrame = () => {
+  const captureFrame = async () => {
     if (videoRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
       const ctx = canvas.getContext("2d");
@@ -51,11 +51,31 @@ const ScreenCapture = () => {
 
         const imageUrl = canvas.toDataURL("image/png");
 
-        const link = document.createElement("a");
-        link.href = imageUrl;
-        link.download = `capture-${Date.now()}.png`;
+        try {
+          const blob = await (await fetch(imageUrl)).blob();
 
-        link.click();
+          const formData = new FormData();
+          formData.append("image", blob, `capture-${Date.now()}.png`);
+
+          const response = await axios.post(
+            "http://localhost:5000/upload",
+            formData,
+            {
+              headers: {
+                "Content-Type": "multipart/form-data",
+              },
+              withCredentials: true,
+            }
+          );
+
+          if (response.status === 200) {
+            console.log("Image uploaded successfully");
+          } else {
+            console.error("Failed to upload image");
+          }
+        } catch (err) {
+          console.error("Error uploading image: ", err);
+        }
       }
     }
   };
@@ -67,10 +87,8 @@ const ScreenCapture = () => {
       captureInterval = setInterval(() => {
         captureFrame();
       }, 5000);
-    } else {
-      if (captureInterval) {
-        clearInterval(captureInterval);
-      }
+    } else if (captureInterval) {
+      clearInterval(captureInterval);
     }
 
     return () => {
@@ -95,26 +113,12 @@ const ScreenCapture = () => {
             Stop Capture
           </button>
         ) : (
-          <>
-            <button
-              onClick={startCapture}
-              className="px-6 py-3 bg-blue-500 text-white font-semibold rounded-lg shadow-md hover:bg-blue-600 mr-4 transition duration-200"
-            >
-              Capture Screen
-            </button>
-            <button
-              onClick={() => startCapture()}
-              className="px-6 py-3 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-600 mr-4 transition duration-200"
-            >
-              Capture Window
-            </button>
-            <button
-              onClick={() => startCapture()}
-              className="px-6 py-3 bg-purple-500 text-white font-semibold rounded-lg shadow-md hover:bg-purple-600 transition duration-200"
-            >
-              Capture Tab
-            </button>
-          </>
+          <button
+            onClick={startCapture}
+            className="px-6 py-3 bg-blue-500 text-white font-semibold rounded-lg shadow-md hover:bg-blue-600 mr-4 transition duration-200"
+          >
+            Capture
+          </button>
         )}
       </div>
 
@@ -124,7 +128,15 @@ const ScreenCapture = () => {
           autoPlay
           controls
           className="w-full rounded-lg shadow-lg"
-        ></video>
+        >
+          <track
+            kind="captions"
+            src="captions.vtt"
+            srcLang="en"
+            label="English"
+            default
+          />
+        </video>
       </div>
 
       <canvas ref={canvasRef} style={{ display: "none" }}></canvas>
